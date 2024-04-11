@@ -2,12 +2,9 @@ package api
 
 import (
 	"bingo-auth/db"
+	"bingo-auth/handler"
 	"bingo-auth/types"
-	"encoding/json"
-	"log"
 	"net/http"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 var DB db.DbStorage
@@ -30,46 +27,18 @@ func NewServer(listenAddr string) *Server {
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("POST /register", s.register)
-	// mux.HandleFunc("POST /login", login)
+	h := handler.NewAuthHandler(DB, types.NewEnv())
+
+	mux.HandleFunc("POST /register", h.Register)
+	mux.HandleFunc("POST /login", h.Login)
+
 	// mux.HandleFunc("POST /logout", logout)
 	// mux.HandleFunc("POST /refresh", refresh)
 
-	return http.ListenAndServe(s.listenAddr, mux)
-}
-
-func (s *Server) register(w http.ResponseWriter, r *http.Request) {
-	
-	credentials := new(types.CredentialRequest)
-	err := json.NewDecoder(r.Body).Decode(credentials)
-	defer r.Body.Close()
-	if err != nil {
-		log.Printf("Failed to decode json: %s", err)
-		http.Error(w, "Internal Server Error", 500)
-		return
-	}
-	
-	hash, err := bcrypt.GenerateFromPassword([]byte(credentials.Password), bcrypt.DefaultCost)
-
-	if err != nil {
-		log.Printf("Failed to hash password: %s", err)
-		http.Error(w, "Internal Server Error", 500)
-		return
+	server := http.Server{
+		Addr:    s.listenAddr,
+		Handler: handler.LoggingMiddleware(mux),
 	}
 
-	usr := types.User{
-		Username: credentials.Username,
-		Hash:     string(hash),
-	}
-
-	err = DB.Add(usr)
-	if err != nil {
-		log.Printf("Failed to add user: %s", err)
-		http.Error(w, "Internal Server Error", 500)
-		return
-	}
-
-	log.Printf("Register user: %v", credentials)
-	log.Printf("Added user: %v", usr)
-	w.WriteHeader(201)
+	return server.ListenAndServe()
 }
