@@ -11,10 +11,11 @@ var DB db.DbStorage
 
 type Server struct {
 	listenAddr string
+	env        types.Env
 }
 
-func NewServer(listenAddr string) *Server {
-	db, err := db.NewDbPostgres(types.NewEnv())
+func NewServer(listenAddr string, env types.Env) *Server {
+	db, err := db.NewDbPostgres(env)
 	DB = db
 	if err != nil {
 		panic(err)
@@ -27,13 +28,11 @@ func NewServer(listenAddr string) *Server {
 func (s *Server) Start() error {
 	mux := http.NewServeMux()
 
-	h := handler.NewAuthHandler(DB, types.NewEnv())
+	h := handler.NewAuthHandler(DB, s.env)
 
 	mux.HandleFunc("POST /register", h.Register)
 	mux.HandleFunc("POST /login", h.Login)
-
-	// mux.HandleFunc("POST /logout", logout)
-	// mux.HandleFunc("POST /refresh", refresh)
+	mux.HandleFunc("POST /refresh", h.Refresh)
 
 	server := http.Server{
 		Addr:    s.listenAddr,

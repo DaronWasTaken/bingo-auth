@@ -1,6 +1,10 @@
 package types
 
-import "os"
+import (
+	"os"
+
+	"github.com/dgrijalva/jwt-go"
+)
 
 type CredentialRequest struct {
 	Username string `json:"username"`
@@ -9,22 +13,27 @@ type CredentialRequest struct {
 
 type User struct {
 	Username string
-	Hash string
+	Hash     string
 }
 
 type TokenResponse struct {
-	AccessToken string `json:"access_token"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int64  `json:"expires_in,omitempty"`
+}
+
+type Claims struct {
 	TokenType string `json:"token_type"`
-	ExpiresIn int64 `json:"expires_in"`
+	jwt.StandardClaims
 }
 
 type Env struct {
-	Dbcon string
+	Dbcon  string
 	Jwtkey string
 }
 
-func NewEnv() *Env {
-
+func NewEnv() Env {
 	dbcon, exists := os.LookupEnv("DB_CONN")
 	if !exists {
 		dbcon = "postgres://postgres:admin@localhost:5432/postgres?sslmode=disable"
@@ -35,9 +44,8 @@ func NewEnv() *Env {
 		jwtkey = "test"
 	}
 
-	return &Env{
-		Dbcon: dbcon,
+	return Env{
+		Dbcon:  dbcon,
 		Jwtkey: jwtkey,
 	}
 }
-
