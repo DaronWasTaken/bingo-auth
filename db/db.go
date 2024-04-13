@@ -34,7 +34,7 @@ func NewDbPostgres(env types.Env) (*DbPostgres, error) {
 }
 
 func (DbPostgres) Add(u types.User) error {
-	_, err := DB.Exec(`INSERT INTO "user" (username, hash) VALUES ($1, $2)`, u.Username, u.Hash)
+	_, err := DB.Exec(`INSERT INTO usr (username, password_hash) VALUES ($1, $2)`, u.Username, u.Hash)
 	if err != nil {
 		return fmt.Errorf("failed to add user to database: %w", err)
 	}
@@ -43,7 +43,7 @@ func (DbPostgres) Add(u types.User) error {
 
 func (DbPostgres) GetUserPassword(username string) (string, error) {
 	hash := new(string)
-	err := DB.Get(hash, `SELECT hash FROM "user" WHERE username = $1`, username)
+	err := DB.Get(hash, `SELECT password_hash FROM usr WHERE username = $1`, username)
 	if err != nil {
 		return "", fmt.Errorf("failed to retrieve user password from db: %w", err)
 	}
