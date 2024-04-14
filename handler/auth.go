@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -47,6 +48,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	usr := types.User{
+		Id:       string(uuid.New().String()),
 		Username: credentials.Username,
 		Hash:     string(hash),
 	}
@@ -54,11 +56,16 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	err = DB.Add(usr)
 	if err != nil {
 		log.Printf("Failed to add user: %s", err)
-		http.Error(w, "Internal Server Error", 500)
+		switch err.(type) {
+		case types.UsernameExistsError:
+			http.Error(w, "Username already exists", 400)
+		default:
+			http.Error(w, "Internal Server Error", 500)
+		}
 		return
 	}
 
-	w.WriteHeader(204)
+	w.Write([]byte(usr.Id))
 }
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
@@ -76,33 +83,33 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hash, err := DB.GetUserPassword(usr.Username)
+	userDb, err := DB.GetUserCredentials(usr.Username)
 	if err != nil {
 		log.Printf("Failed to retrieve user password: %s", err)
 		http.Error(w, "Internal server error", 500)
 		return
 	}
-	if hash == "" {
+	if userDb.Hash == "" {
 		log.Printf("User not found during login: %s", usr.Username)
 		http.Error(w, "User not found", http.StatusBadRequest)
 		return
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(hash), []byte(usr.Password))
+	err = bcrypt.CompareHashAndPassword([]byte(userDb.Hash), []byte(usr.Password))
 	if err != nil {
 		log.Printf("Failed login attempt: %s", err)
 		http.Error(w, "Username or password incorrect", http.StatusUnauthorized)
 		return
 	}
 
-	accessToken, err := newAccessToken(usr.Username, Env.Jwtkey)
+	accessToken, err := newAccessToken(userDb.Id, Env.Jwtkey)
 	if err != nil {
 		log.Print(err)
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
 
-	refreshToken, err := newRefreshToken(usr.Username, Env.Jwtkey)
+	refreshToken, err := newRefreshToken(userDb.Id, Env.Jwtkey)
 	if err != nil {
 		log.Print(err)
 		http.Error(w, "Internal Server Error", 500)
@@ -154,34 +161,35 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func newAccessToken(username string, jwtkey string) (string, error) {
+func newAccessToken(userId string, jwtkey string) (string, error) {
 	expirationTime := time.Now().Add(5 * time.Minute)
 	claims := types.Claims{
 		TokenType: "access_token",
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: expirationTime.Unix(),
-			Subject:   username,
+			Subject:   userId,
 		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	accessToken, err := token.SignedString([]byte(jwtkey))
+	log.Print("jwt_key: ", jwtkey)
 	if err != nil {
 		return "", fmt.Errorf("could not sign access token: %w", err)
 	}
 	return accessToken, nil
 }
 
-func newRefreshToken(username string, jwtkey string) (string, error) {
+func newRefreshToken(userId string, jwtkey string) (string, error) {
 	expirationTime := time.Now().Add(1 * time.Hour)
 	claims := types.Claims{
 		TokenType: "refresh_token",
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: expirationTime.Unix(),
-			Subject:   username,
+			Subject:   userId,
 		},
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	refreshToken, err := token.SignedString([]byte(jwtkey))
 	if err != nil {
 		return "", fmt.Errorf("could not sign refresh token: %w", err)

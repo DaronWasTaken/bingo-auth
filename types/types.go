@@ -12,8 +12,9 @@ type CredentialRequest struct {
 }
 
 type User struct {
-	Username string
-	Hash     string
+	Id       string `db:"id"`
+	Username string `db:"username"`
+	Hash     string `db:"password_hash"`
 }
 
 type TokenResponse struct {
@@ -41,7 +42,7 @@ func NewEnv() Env {
 
 	jwtkey, exists := os.LookupEnv("JWT_KEY")
 	if !exists {
-		jwtkey = "test"
+		jwtkey = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 	}
 
 	return Env{

@@ -2,6 +2,7 @@ package db
 
 import (
 	"bingo-auth/types"
+	"database/sql"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
@@ -9,20 +10,23 @@ import (
 )
 
 type DbStorage interface {
-	GetUserPassword(username string) (string, error)
+	GetUserCredentials(username string) (types.User, error)
 	Add(user types.User) error
 }
 
-type DbPostgres struct{
+type DbPostgres struct {
 	Field1 string
 }
 
 var DB *sqlx.DB
 
-//	"user" (
-//     username text PRIMARY KEY,
-//     hash text
-// 	);
+//"user" (
+//	id text PRIMARY KEY,
+// 	username text,
+// 	password_hash text,
+// 	level_id int,
+// 	points int,
+// );
 
 func NewDbPostgres(env types.Env) (*DbPostgres, error) {
 	db, err := sqlx.Connect("postgres", env.Dbcon)
@@ -34,18 +38,36 @@ func NewDbPostgres(env types.Env) (*DbPostgres, error) {
 }
 
 func (DbPostgres) Add(u types.User) error {
-	_, err := DB.Exec(`INSERT INTO usr (username, password_hash) VALUES ($1, $2)`, u.Username, u.Hash)
+
+	username := ""
+	err := DB.Get(&username, `SELECT username FROM usr WHERE username=$1`, u.Username)
+	if err != sql.ErrNoRows && err != nil {
+		return fmt.Errorf("failed to check username uniqueness: %w", err)
+	}
+	if username != "" {
+		return types.UsernameExistsError{Message: "Username already exists"}
+	}
+
+	_, err = DB.Exec(
+		`INSERT INTO usr VALUES ($1, $2, $3, $4, $5)`,
+		u.Id,
+		u.Username,
+		u.Hash,
+		0, // points
+		1, // lvl
+	)
+
 	if err != nil {
 		return fmt.Errorf("failed to add user to database: %w", err)
 	}
 	return nil
 }
 
-func (DbPostgres) GetUserPassword(username string) (string, error) {
-	hash := new(string)
-	err := DB.Get(hash, `SELECT password_hash FROM usr WHERE username = $1`, username)
+func (DbPostgres) GetUserCredentials(username string) (types.User, error) {
+	var usr types.User
+	err := DB.Get(&usr, `SELECT id, username, password_hash FROM usr WHERE username = $1`, username)
 	if err != nil {
-		return "", fmt.Errorf("failed to retrieve user password from db: %w", err)
+		return types.User{}, fmt.Errorf("failed to retrieve user password from db: %w", err)
 	}
-	return *hash, nil
+	return usr, nil
 }
