@@ -162,7 +162,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 }
 
 func newAccessToken(userId string, jwtkey string) (string, error) {
-	expirationTime := time.Now().Add(5 * time.Minute)
+	expirationTime := time.Now().Add(time.Duration(Env.AccessTokenTime) * time.Minute)
 	claims := types.Claims{
 		TokenType: "access_token",
 		StandardClaims: jwt.StandardClaims{
@@ -173,7 +173,6 @@ func newAccessToken(userId string, jwtkey string) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	accessToken, err := token.SignedString([]byte(jwtkey))
-	log.Print("jwt_key: ", jwtkey)
 	if err != nil {
 		return "", fmt.Errorf("could not sign access token: %w", err)
 	}
@@ -181,7 +180,7 @@ func newAccessToken(userId string, jwtkey string) (string, error) {
 }
 
 func newRefreshToken(userId string, jwtkey string) (string, error) {
-	expirationTime := time.Now().Add(1 * time.Hour)
+	expirationTime := time.Now().Add(time.Duration(Env.RefreshTokenTime) * time.Minute)
 	claims := types.Claims{
 		TokenType: "refresh_token",
 		StandardClaims: jwt.StandardClaims{
