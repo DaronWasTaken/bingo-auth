@@ -15,7 +15,7 @@ type DbStorage interface {
 }
 
 type DbPostgres struct {
-	Field1 string
+
 }
 
 var DB *sqlx.DB
@@ -38,7 +38,6 @@ func NewDbPostgres(env types.Env) (*DbPostgres, error) {
 }
 
 func (DbPostgres) Add(u types.User) error {
-
 	username := ""
 	err := DB.Get(&username, `SELECT username FROM usr WHERE username=$1`, u.Username)
 	if err != sql.ErrNoRows && err != nil {

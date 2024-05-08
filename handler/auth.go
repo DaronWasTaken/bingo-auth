@@ -58,9 +58,9 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to add user: %s", err)
 		switch err.(type) {
 		case types.UsernameExistsError:
-			http.Error(w, "Username already exists", 400)
+			http.Error(w, "Username already exists", http.StatusConflict)
 		default:
-			http.Error(w, "Internal Server Error", 500)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
 		return
 	}
@@ -74,12 +74,15 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Password: r.FormValue("password"),
 	}
 
-	usr.Username = r.FormValue("username")
-	usr.Password = r.FormValue("password")
-
 	if usr.Username == "" {
 		log.Print("Username empty")
-		http.Error(w, "Username empty", 400)
+		http.Error(w, "Username empty", http.StatusBadRequest)
+		return
+	}
+
+	if usr.Password == "" {
+		log.Print("Password empty")
+		http.Error(w, "Password empty", http.StatusBadRequest)
 		return
 	}
 
