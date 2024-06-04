@@ -22,7 +22,7 @@ func NewServer(listenAddr string, env types.Env) *Server {
 	}
 	return &Server{
 		listenAddr: listenAddr,
-		env: env,
+		env:        env,
 	}
 }
 

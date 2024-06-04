@@ -3,6 +3,7 @@ package types
 import (
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/dgrijalva/jwt-go"
 )
@@ -16,6 +17,15 @@ type User struct {
 	Id       string `db:"id"`
 	Username string `db:"username"`
 	Hash     string `db:"password_hash"`
+}
+
+type Token struct {
+	Id               string `db:"usr_id"`
+	AccessToken      string `db:"access_token"`
+	RefreshToken     string `db:"refresh_token"`
+	AccessExpiresAt  time.Time  `db:"access_expires_at"`
+	RefreshExpiresAt time.Time  `db:"refresh_expires_at"`
+	CreatedAt        time.Time  `db:"created_at"`
 }
 
 type TokenResponse struct {
@@ -65,9 +75,9 @@ func NewEnv() Env {
 	}
 
 	return Env{
-		Dbcon:  dbcon,
-		Jwtkey: jwtkey,
-		AccessTokenTime: accessTokenTime,
+		Dbcon:            dbcon,
+		Jwtkey:           jwtkey,
+		AccessTokenTime:  accessTokenTime,
 		RefreshTokenTime: refreshTokenTime,
 	}
 }

@@ -4,7 +4,7 @@ import (
 	"bingo-auth/db"
 	"bingo-auth/types"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"log"
 	"net/http"
 	"time"
@@ -56,11 +56,11 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	err = DB.Add(usr)
 	if err != nil {
 		log.Printf("Failed to add user: %s", err)
-		switch err.(type) {
-		case types.UsernameExistsError:
-			http.Error(w, "Username already exists", http.StatusConflict)
-		default:
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		var myError types.APIError
+		if ok := errors.As(err, &myError); ok {
+			http.Error(w, myError.Text, myError.Code)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		return
 	}
@@ -105,14 +105,32 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, err := newAccessToken(userDb.Id, Env.Jwtkey)
+	accessToken, accessTokenClaims := newAccessToken(userDb.Id)
+	signedAccessToken, err := accessToken.SignedString([]byte(Env.Jwtkey))
 	if err != nil {
 		log.Print(err)
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
 
-	refreshToken, err := newRefreshToken(userDb.Id, Env.Jwtkey)
+	refreshToken, refreshTokenClaims := newRefreshToken(userDb.Id)
+	signedRefreshToken, err := refreshToken.SignedString([]byte(Env.Jwtkey))
+	if err != nil {
+		log.Print(err)
+		http.Error(w, "Internal Server Error", 500)
+		return
+	}
+
+	dbToken := types.Token{
+		Id:               userDb.Id,
+		AccessToken:      signedAccessToken,
+		RefreshToken:     signedRefreshToken,
+		AccessExpiresAt:  time.Unix(accessTokenClaims.ExpiresAt, 0),
+		RefreshExpiresAt: time.Unix(refreshTokenClaims.ExpiresAt, 0),
+		CreatedAt:        time.Now(),
+	}
+
+	err = DB.UpdateOrCreateToken(dbToken)
 	if err != nil {
 		log.Print(err)
 		http.Error(w, "Internal Server Error", 500)
@@ -120,8 +138,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resBody := types.TokenResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
+		AccessToken:  signedAccessToken,
+		RefreshToken: signedRefreshToken,
 		TokenType:    "Bearer",
 	}
 
@@ -142,15 +160,35 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, err := newAccessToken(claims.Subject, Env.Jwtkey)
+	accessToken, accessTokenClaims := newAccessToken(claims.Subject)
+	signedAccessToken, err := signToken(accessToken)
 	if err != nil {
 		log.Printf("Failed to create token during refresh: %s", err)
 		http.Error(w, "Internal Server Error", 500)
 		return
 	}
 
+	dbToken := types.Token{
+		Id:              claims.Subject,
+		AccessToken:     signedAccessToken,
+		RefreshToken:    refreshTokenInput,
+		AccessExpiresAt: time.Unix(accessTokenClaims.ExpiresAt, 0),
+	}
+
+	err = DB.UpdateTokenOnRefresh(dbToken)
+	if err != nil {
+		log.Printf("Failed to create token during refresh: %s", err)
+		var apiError types.APIError
+		if errors.As(err, &apiError) {
+			http.Error(w, apiError.Text, apiError.Code)
+		} else {
+			http.Error(w, "Internal Server Error", 500)
+		}
+		return
+	}
+
 	resBody := types.TokenResponse{
-		AccessToken:  accessToken,
+		AccessToken:  signedAccessToken,
 		RefreshToken: refreshTokenInput,
 		TokenType:    "Bearer",
 	}
@@ -164,7 +202,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func newAccessToken(userId string, jwtkey string) (string, error) {
+func newAccessToken(userId string) (*jwt.Token, types.Claims) {
 	expirationTime := time.Now().Add(time.Duration(Env.AccessTokenTime) * time.Minute)
 	claims := types.Claims{
 		TokenType: "access_token",
@@ -174,15 +212,10 @@ func newAccessToken(userId string, jwtkey string) (string, error) {
 		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	accessToken, err := token.SignedString([]byte(jwtkey))
-	if err != nil {
-		return "", fmt.Errorf("could not sign access token: %w", err)
-	}
-	return accessToken, nil
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims), claims
 }
 
-func newRefreshToken(userId string, jwtkey string) (string, error) {
+func newRefreshToken(userId string) (*jwt.Token, types.Claims) {
 	expirationTime := time.Now().Add(time.Duration(Env.RefreshTokenTime) * time.Minute)
 	claims := types.Claims{
 		TokenType: "refresh_token",
@@ -191,10 +224,9 @@ func newRefreshToken(userId string, jwtkey string) (string, error) {
 			Subject:   userId,
 		},
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	refreshToken, err := token.SignedString([]byte(jwtkey))
-	if err != nil {
-		return "", fmt.Errorf("could not sign refresh token: %w", err)
-	}
-	return refreshToken, nil
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims), claims
+}
+
+func signToken(token *jwt.Token) (string, error) {
+	return token.SignedString([]byte(Env.Jwtkey))
 }

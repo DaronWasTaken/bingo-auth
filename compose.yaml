@@ -1,24 +1,31 @@
-# Comments are provided throughout this file to help you get started.
-# If you need more help, visit the Docker compose reference guide at
-# https://docs.docker.com/go/compose-spec-reference/
-
-# Here the instructions define your application as a service called "server".
-# This service is built from the Dockerfile in the current directory.
-# You can add other services your application may depend on here, such as a
-# database or a cache. For examples, see the Awesome Compose repository:
-# https://github.com/docker/awesome-compose
 services:
-  api:
+  auth:
     build:
-      context: .
+      context: bingo-auth/.
       target: final
     ports:
       - 8081:8081
     environment:
-      - DB_CONN=postgres://postgres:admin@db/postgres?sslmode=disable
+      - DB_CONN=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}?sslmode=disable
+      - JWT_KEY=${JWT_KEY}
     depends_on:
       db:
         condition: service_healthy
+  
+  api:
+    image: daronwastaken/bingo-api:${DOCKER_IMAGE_TAG}
+    build:
+      context: bingo-api/.
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - ConnectionStrings:DefaultConnection=Host=db;Port=5432;Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Database=${POSTGRES_DB};
+      - Jwt:Key=${JWT_KEY}
+  
   db:
     image: postgres
     restart: always
@@ -26,7 +33,7 @@ services:
     volumes:
       - go-auth-db-data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_PASSWORD=admin
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     expose:
       - 5432
     ports:
@@ -37,4 +44,4 @@ services:
       timeout: 5s
       retries: 5
 volumes:
-  go-auth-db-data:
+  bingo-db-data:
