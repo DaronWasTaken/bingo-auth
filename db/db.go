@@ -23,14 +23,6 @@ type DbPostgres struct {
 
 var DB *sqlx.DB
 
-//"user" (
-//	id text PRIMARY KEY,
-// 	username text,
-// 	password_hash text,
-// 	level_id int,
-// 	points int,
-// );
-
 func NewDbPostgres(env types.Env) (*DbPostgres, error) {
 	db, err := sqlx.Connect("postgres", env.Dbcon)
 	DB = db
